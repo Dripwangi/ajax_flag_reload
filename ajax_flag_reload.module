@@ -1,0 +1,50 @@
+<?php
+
+/**
+ * @file
+ * Contains ajax_flag_reload.module.
+ */
+
+use Drupal\Core\Ajax\AjaxResponse;
+use Drupal\Core\Ajax\ReplaceCommand;
+use Drupal\Core\Url;
+use Drupal\flag\FlagInterface;
+use Drupal\flag\Event\FlaggingEvent;
+use Drupal\flag\Event\FlagEvents;
+
+/**
+ * Implements hook_ENTITY_TYPE_view_alter().
+ */
+function ajax_flag_reload_node_view_alter(array &$build, \Drupal\Core\Entity\EntityInterface $entity, \Drupal\Core\Entity\Display\EntityViewDisplayInterface $display) {
+  $current_page = pager_find_page();
+  $ajax_url = Url::fromUri('internal:/path/to/your/view', ['query' => ['page' => $current_page]])->toString();
+  $build['#attached']['library'][] = 'core/drupal.ajax';
+  $build['#attached']['drupalSettings']['ajaxFlagReload'] = ['url' => $ajax_url];
+}
+
+/**
+ * Implements hook_flag_flag().
+ */
+function ajax_flag_reload_flag(FlagInterface $flag, $entity_id, \Drupal\Core\Session\AccountInterface $account, $action_id) {
+  \Drupal::service('event_dispatcher')->addListener(FlagEvents::ENTITY_FLAGGED, 'ajax_flag_reload_flagged');
+}
+
+/**
+ * Responds to node being flagged.
+ *
+ * @param \Drupal\flag\Event\FlaggingEvent $event
+ *   The flagging event.
+ */
+function ajax_flag_reload_flagged(FlaggingEvent $event) {
+  $response = new AjaxResponse();
+  $selector = '.view-dom-id-' . $event->getFlagging()->get('view_dom_id')->getString();
+  $response->addCommand(new ReplaceCommand($selector, ['#markup' => \Drupal::service('renderer')->renderRoot(drupal_get_js('ajaxFlagReload')['url'])]));
+  return $response;
+}
+
+/**
+ * Implements hook_page_attachments().
+ */
+function ajax_flag_reload_page_attachments(array &$page) {
+  $page['#attached']['library'][] = 'ajax_flag_reload/ajax_flag_reload';
+}
